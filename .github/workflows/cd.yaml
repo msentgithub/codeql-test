@@ -1,0 +1,82 @@
+name: continuous deployment
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - 'web/**'
+            - 'app/**'
+    
+    workflow_dispatch:
+
+defaults:
+    run:
+        shell: bash
+        working-directory: ./web
+
+jobs:
+    deploy_staging:
+    # Deploying main branch into staging environment 
+    # the environment keys makes is easier to define
+    # secrets that are only available in that environment
+        environment: staging
+        name: 'Deploy to staging'
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v2
+              name: 'checkout the repo'
+            
+            - name: 'Deploy the code to staging using rsync action'
+              uses: burnett01/rsync-deployments@23a557dceb19f9bb960ef40cf75cab5e9b37ec1f
+              with:
+                    switches: -avzr --delete
+                    path: ./web
+                    remote_path: /var/app
+                    remote_host: ${{ secrets.HOSTNAME }}
+                    remote_user: ${{ secrets.REMOTE_USER }}
+                    remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+            
+            - name: 'Execute SSH commands on the remote server'
+              uses: JimCronqvist/action-ssh@7737f1192ddd8376686e9d6354dea44592c942bf
+              with:
+                hosts: '{{ secrets.REMOTE_USER }}@{{ secrets.HOSTNAME }}'
+                privateKey: ${{ secrets.SSH_PRIVATE_KEY }}
+                command: |
+                    cd /var/app/web
+                    npm ci
+                    pm2 start /var/app/web/bin/www || pm2 restart /var/app/web/bin/www
+                    sudo service nginx restart
+
+    deploy_production:
+        environment: production
+        name: 'Deploy to production'
+        runs-on: ubuntu-latest
+        # ensure that staging happened before we deploy to production
+        needs: deploy_staging
+
+        steps:
+            - name: 'checkout repository'
+              uses: actions/checkout@v2
+            
+            - name: 'Deploy to production'
+              uses: burnett01/rsync-deployments@23a557dceb19f9bb960ef40cf75cab5e9b37ec1f
+              with:
+                switches: -avzr --delete
+                path: ./web
+                remote_path: /var/app
+                remote_host: ${{ secrets.HOSTNAME }}
+                remote_user: ${{ secrets.REMOTE_USER }}
+                remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+            - name: 'execute commands on remote server'
+              uses: JimCronqvist/action-ssh@7737f1192ddd8376686e9d6354dea44592c942bf
+              with: 
+                hosts: '${{ secrets.REMOTE_USER }}@${{ secrets.HOSTNAME }}'
+                privateKey: ${{ secrets.PRIVATE_KEY }}
+                command: |
+                    cd /var/app/web
+                    npm ci
+                    pm2 start /var/app/web/bin/www || pm2 restart /var/app/web/bin/www
+                    sudo service nginx restart

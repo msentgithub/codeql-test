@@ -1,0 +1,53 @@
+name: continous integration workflow 
+
+# Triggered on PRs on main 
+
+on:
+    pull_request:
+        branches:
+            - main
+        paths:
+            - 'web/**'
+            - 'app/**'
+    push:
+        branches:
+            - main
+        paths:
+            - 'web/**'
+            - 'app/**'
+
+jobs:
+    # Unit tests
+    test:
+        name: 'run unit tests'
+        defaults:
+            run:
+                shell: bash
+                working-directory: ./web
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+              name: 'checkout the repo'
+
+            - name: 'install npm dependencies'
+              run: npm install
+            
+            - name: 'run tests'
+              run: npm run test
+        
+    # identify code linting issues
+
+    linter:
+        name: 'run linter'
+        defaults:
+            run:
+                shell: bash
+                working-directory: ./web
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+              name: 'checkout repo' 
+            - name: 'install dependencies'
+              run: npm install
+            - name: 'run linter'
+              run: npx standard -v
